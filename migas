@@ -1,0 +1,254 @@
+#!/usr/bin/php
+<?php
+
+require_once 'pan/kore/Migas.php';
+
+echo "Pandemolde :: Migas\n";
+
+if(!isset($argv[1])){
+    echo "Al parecer no hay parametros ingresados\n";
+    echo "-- Saludos\n";
+    exit(0);
+}
+
+$parametros = explode('::',$argv[1]);
+$second_param = null;
+if(isset($argv[2])){
+    $second_param = $argv[2];
+}
+
+$third_param = null;
+if(isset($argv[3])){
+    $third_param = $argv[3];
+}
+
+$option = strtolower($parametros[0]);
+
+switch ($option){
+
+    case 'help':
+        echo \pan\Migas::getHelp(strtolower($parametros[1]));
+        break;
+
+    case 'app':
+        if(isset($parametros[1])){
+            if(strtolower($parametros[1]) == 'create'){
+                $_folders_htaccess = array('app','libs','media','sql');
+                $_htaccess_content = 'Deny from all';
+                $dir = array(
+                    'app',
+                    'libs',
+                    'media',
+                    'pub' => array('js','img','css','others'),
+                    'sql',
+                    'tmp' => array('logs','cache')
+                    );
+                foreach($dir as $d => $e){
+                    if(is_array($e)){
+                        mkdir($d,0755);
+                        if(in_array($d,$_folders_htaccess)){
+                            $h = fopen($d . DIRECTORY_SEPARATOR . '.htaccess','w');
+                            fwrite($h,$_htaccess_content);
+                            fclose($h);
+                        }
+                        foreach($e as $f){
+                            mkdir($d. DIRECTORY_SEPARATOR . $f ,0755);        
+                        }
+                    }else{
+                        mkdir($e,0755);
+                        if(in_array($e,$_folders_htaccess)){
+                            $h = fopen($e . DIRECTORY_SEPARATOR . '.htaccess','w');
+                            fwrite($h,$_htaccess_content);
+                            fclose($h);
+                        }
+                    }
+                    
+                }
+
+                if(is_dir('app')){
+                    $_app_config = file_get_contents('pan/app_config.php.example');
+                    $_app_database = file_get_contents('pan/app_database.php.example');
+
+                    $a = file_put_contents('app/app_config.php',$_app_config);
+                    $a = file_put_contents('app/app_database.php',$_app_database);
+                }
+
+                echo "* Estructura creada  \n";
+            }
+        }
+        break;
+
+    case 'module' :
+        if(isset($parametros[1])){
+            $module = ucwords($parametros[1]);
+            echo "* Creando modulo $module \n";
+            $directories = array(
+                    'assets' => array(
+                            'css',
+                            'js',
+                            'img'
+                    ),
+                    'controllers',
+                    'entities',
+                    'libraries',
+                    'views'
+            );
+            $dir_module = 'app' . DIRECTORY_SEPARATOR . $module;
+            /*if(!is_dir($dir_module)){
+                mkdir($dir_module);
+            }*/
+
+            foreach($directories as $dir => $content){
+
+                $make_dir =  $dir_module . DIRECTORY_SEPARATOR . $dir;
+                if(is_numeric($dir)){
+                    $make_dir =  $dir_module . DIRECTORY_SEPARATOR . $content;
+                }
+                if(is_array($content)){
+                    foreach($content as $subdir){
+                        mkdir($dir_module . DIRECTORY_SEPARATOR . $dir . DIRECTORY_SEPARATOR . $subdir, 0755, true);
+                    }
+                }else{
+                    mkdir($make_dir);
+                }
+            }
+            echo "* Modulo $module creado  \n";
+        }else{
+            echo "Parece que falta indicar el nombre del modulo, no?\n";
+        }
+        break;
+
+    case 'entity' :
+        if(isset($parametros[1])){
+
+            $entity = explode('/',$parametros[1]);
+            if(isset($entity[0]) and isset($entity[1])){
+                $entity_module = $entity[0];
+                $entity_class = $entity[1];
+
+                $table = "";
+                if(!is_null($second_param)){
+                    $s = explode('::',$second_param);
+                    if(isset($s[1]) and !empty($s[1]))
+                        $table = "\tprotected \$table = '".$s[1]."';\n\n";
+                }
+
+                $primary_key = "";
+                if(!is_null($third_param)){
+                    $t = explode('::', $third_param);
+                    if(isset($t[1]) and !empty($t[1])){
+                        $t_pk = explode(',', $t[1]);
+                        if(count($t_pk) > 1){
+                            $arr_pk = "array(";
+                            foreach($t_pk as $pk){
+                                $arr_pk .= "'".$pk."',";
+                            }
+                            $arr_pk = trim($arr_pk,',') . ")";
+
+                            $primary_key = "\tprotected \$primary_key = ".$arr_pk.";\n\n";    
+                        }else{
+                            $primary_key = "\tprotected \$primary_key = '".$t_pk[0]."';\n\n";    
+                        }
+                        
+                    }
+                }
+                $content_entity = "<?php\n\nclass " . $entity_class . " extends \\pan\\Entity{\n\n " . $table . $primary_key . "}";
+
+
+                $path_entity = 'app' . DIRECTORY_SEPARATOR . ucwords($entity_module) . DIRECTORY_SEPARATOR . 'entities' . DIRECTORY_SEPARATOR . $entity_class . '.php';
+                $f = fopen($path_entity,'w');
+                fwrite($f,$content_entity);
+                fclose($f);
+                if(is_file($path_entity)){
+                    echo "* Entidad ". $entity_class . " creada\n";
+                }else{
+                    echo "* Entidad ". $entity_class . " no ha sido creada\n";
+                }
+            }else{
+                echo "* El formato para crear entidad es Modulo/Entidad\n";
+            }
+
+
+
+        }
+        break;
+
+    case 'controller' :
+        if(isset($parametros[1])){
+
+            $controller = explode('/',$parametros[1]);
+            if(!is_dir('app/'.$controller[0])){
+                echo "* El modulo no existe\n";
+            }else{
+                if(isset($controller[0]) and isset($controller[1])){
+                    $controller_module = $controller[0];
+                    if(!is_dir('app/'.$controller_module)){
+                        echo "* El modulo no existe\n";
+                        break;
+                    }
+
+                    $controller_class = ucwords($controller[1]);
+
+
+                    $methods = "";
+                    if(!is_null($second_param)){
+                        $s = explode('::',$second_param);
+                        if(isset($s[0]) and !empty($s[0]) and $s[0] == 'actions'){
+                            $m = explode(',', $s[1]);
+                            foreach($m as $n){
+                                if(!empty(trim($n)) or !is_null(trim($n)))
+                                    $methods .= "\tpublic function ".$n."(){\n\t\t/** code **/\n\t}\n\n";    
+                            }
+                            
+                        }
+                    }
+
+                    $content_controller = "<?php\n\nclass " . $controller_class . " extends \\pan\\Controller{\n\n\tpublic function __construct(){\n\t\tparent::__construct();\n\t}\n\n".$methods."}";
+
+
+                    $path_controller = 'app' . DIRECTORY_SEPARATOR . ucwords($controller_module) . DIRECTORY_SEPARATOR . 'controllers' . DIRECTORY_SEPARATOR . $controller_class . '.php';
+                    $f = fopen($path_controller,'w');
+                    fwrite($f,$content_controller);
+                    fclose($f);
+                    if(is_file($path_controller)){
+                        echo "* Controlador ". $controller_class . " creada\n";
+                    }else{
+                        echo "* Controlador ". $entity_class . " no ha sido creada\n";
+                    }
+                }else{
+                    echo "* El formato para crear controlador es Modulo/Controlador\n";
+                }
+            }
+            
+        }
+        break;
+
+    case 'tmp':
+        if(isset($parametros[1])){
+            echo "* Creando directorio tmp/".$parametros[1]." n";
+
+            if(!is_dir('tmp')){
+                mkdir('tmp',0777);
+                chmod('tmp',0777);
+            }
+
+            mkdir('tmp/'.$parametros[1],0777,true);
+
+            if(is_dir('tmp/'.$parametros[1])){
+                chmod('tmp/'.$parametros[1],0777);
+                echo "* Se ha creado el directorio tmp/".$parametros[1]."\n";
+            }else{
+                echo "* El directorio tmp/".$parametros[1]." no ha sido creado\n";
+            }
+        }
+        break;
+
+}
+
+
+echo "\n";
+exit(0);
+
+
+
+?>
